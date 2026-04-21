@@ -77,9 +77,9 @@ class _TaskPageState extends State<TaskPage> {
             children: [
               DrawerHeader(
                 decoration: const BoxDecoration(color: Colors.deepPurple),
-                child: Column(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Row(
                       children: [
@@ -88,29 +88,23 @@ class _TaskPageState extends State<TaskPage> {
                           child: Icon(Icons.person_rounded),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'Taskflow 用户',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
+                        const Text(
+                          'Taskflow 用户',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ],
                     ),
                     Row(
                       children: [
-                        TextButton(
+                        IconButton(
                           onPressed: () => _showComingSoon('我的信息'),
-                          child: const Text(
-                            '我的信息',
-                            style: TextStyle(color: Colors.white),
-                          ),
+                          icon: const Icon(Icons.notifications_active, color: Colors.white),
+                          tooltip: '我的信息',
                         ),
-                        TextButton(
+                        IconButton(
                           onPressed: () => _showComingSoon('设置'),
-                          child: const Text(
-                            '设置',
-                            style: TextStyle(color: Colors.white),
-                          ),
+                          icon: const Icon(Icons.settings, color: Colors.white),
+                          tooltip: '设置',
                         ),
                       ],
                     ),
