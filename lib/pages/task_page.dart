@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:taskflow/data/task_repository.dart';
 import 'package:taskflow/models/task_item.dart';
+import 'package:taskflow/pages/settings_page.dart';
 import 'package:taskflow/pages/task_detail_page.dart';
 
 class TaskPage extends StatefulWidget {
@@ -108,7 +109,7 @@ class _TaskPageState extends State<TaskPage> {
                           tooltip: '我的信息',
                         ),
                         IconButton(
-                          onPressed: () => _showComingSoon('设置'),
+                          onPressed: _openSettingsPage,
                           icon: const Icon(Icons.settings, color: Colors.white),
                           tooltip: '设置',
                         ),
@@ -501,6 +502,15 @@ class _TaskPageState extends State<TaskPage> {
 
   void _showComingSoon(String label) {
     _showSnack('$label 功能即将上线');
+  }
+
+  Future<void> _openSettingsPage() async {
+    Navigator.of(context).pop();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SettingsPage(),
+      ),
+    );
   }
 
   void _showSnack(String message) {

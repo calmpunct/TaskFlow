@@ -26,6 +26,21 @@ extension ReminderOptionView on ReminderOption {
 }
 
 class AnniversaryItem {
+  static const List<IconData> _builtInIconPool = <IconData>[
+    Icons.favorite_rounded,
+    Icons.cake_rounded,
+    Icons.celebration_rounded,
+    Icons.flight_takeoff_rounded,
+    Icons.house_rounded,
+    Icons.school_rounded,
+    Icons.work_rounded,
+    Icons.pets_rounded,
+    Icons.spa_rounded,
+    Icons.flag_rounded,
+    Icons.favorite_border_rounded,
+    Icons.star_rounded,
+  ];
+
   AnniversaryItem({
     required this.id,
     required this.name,
@@ -61,10 +76,21 @@ class AnniversaryItem {
     return reminders.map((option) => option.label).join('、');
   }
 
-  IconData get builtInIcon => IconData(
-        iconCodePoint ?? Icons.flag_rounded.codePoint,
-        fontFamily: iconFontFamily ?? Icons.flag_rounded.fontFamily,
-      );
+  IconData get builtInIcon {
+    final codePoint = iconCodePoint;
+    final fontFamily = iconFontFamily;
+    if (codePoint == null) {
+      return Icons.flag_rounded;
+    }
+
+    for (final icon in _builtInIconPool) {
+      if (icon.codePoint == codePoint &&
+          (fontFamily == null || icon.fontFamily == fontFamily)) {
+        return icon;
+      }
+    }
+    return Icons.flag_rounded;
+  }
 
   AnniversaryItem copyWith({
     String? id,
