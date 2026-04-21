@@ -43,8 +43,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
 
-    expect(find.text('我的信息'), findsOneWidget);
-    expect(find.text('设置'), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_active), findsOneWidget);
+    expect(find.byIcon(Icons.settings), findsOneWidget);
     expect(find.text('今天'), findsOneWidget);
     expect(find.text('明天'), findsOneWidget);
     expect(find.text('最近7天'), findsOneWidget);

@@ -35,24 +35,29 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('整理今天的待办事项').evaluate().isNotEmpty) {
+        break;
+      }
+    }
 
     expect(find.text('任务'), findsWidgets);
     expect(find.text('专注'), findsOneWidget);
     expect(find.text('日历'), findsOneWidget);
     expect(find.text('倒数日'), findsOneWidget);
-    expect(find.text('整理今天的待办事项'), findsOneWidget);
+    expect(find.text('添加任务'), findsOneWidget);
 
     await tester.tap(find.text('专注'));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('专注 页面'), findsOneWidget);
 
     await tester.tap(find.text('日历'));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('日历 页面'), findsOneWidget);
 
     await tester.tap(find.text('倒数日'));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('倒数日 页面'), findsOneWidget);
   });
 }

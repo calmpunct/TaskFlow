@@ -4,10 +4,15 @@ import 'package:taskflow/models/task_item.dart';
 import 'package:taskflow/pages/task_detail_page.dart';
 
 class TaskPage extends StatefulWidget {
-  TaskPage({super.key, TaskRepository? repository})
+  TaskPage({
+    super.key,
+    TaskRepository? repository,
+    this.onDrawerChanged,
+  })
       : repository = repository ?? HiveTaskRepository();
 
   final TaskRepository repository;
+  final ValueChanged<bool>? onDrawerChanged;
 
   @override
   State<TaskPage> createState() => _TaskPageState();
@@ -69,6 +74,7 @@ class _TaskPageState extends State<TaskPage> {
     return Scaffold(
       drawerEnableOpenDragGesture: true,
       drawerEdgeDragWidth: MediaQuery.of(context).size.width * 0.3,
+      onDrawerChanged: widget.onDrawerChanged,
       drawer: Drawer(
         width: MediaQuery.of(context).size.width * 0.8,
         child: SafeArea(

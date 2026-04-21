@@ -13,9 +13,19 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
+  bool _isTaskDrawerOpen = false;
 
   late final List<Widget> _pages = [
-    TaskPage(),
+    TaskPage(
+      onDrawerChanged: (isOpen) {
+        if (_isTaskDrawerOpen == isOpen) {
+          return;
+        }
+        setState(() {
+          _isTaskDrawerOpen = isOpen;
+        });
+      },
+    ),
     const FocusPage(),
     const CalendarPage(),
     const CountdownPage(),
@@ -35,23 +45,25 @@ class _HomeShellState extends State<HomeShell> {
         index: _currentIndex,
         children: _pages,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: _tabs
-            .map(
-              (tab) => BottomNavigationBarItem(
-                icon: Icon(tab.icon),
-                label: tab.label,
-              ),
-            )
-            .toList(),
-      ),
+      bottomNavigationBar: _isTaskDrawerOpen
+          ? null
+          : BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              items: _tabs
+                  .map(
+                    (tab) => BottomNavigationBarItem(
+                      icon: Icon(tab.icon),
+                      label: tab.label,
+                    ),
+                  )
+                  .toList(),
+            ),
     );
   }
 }
