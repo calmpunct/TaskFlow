@@ -4,7 +4,7 @@ import 'package:taskflow/models/task_item.dart';
 import 'package:taskflow/pages/task_detail_page.dart';
 
 class TaskPage extends StatefulWidget {
-  const TaskPage({super.key, TaskRepository? repository})
+  TaskPage({super.key, TaskRepository? repository})
       : repository = repository ?? HiveTaskRepository();
 
   final TaskRepository repository;

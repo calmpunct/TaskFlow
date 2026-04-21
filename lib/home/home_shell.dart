@@ -14,11 +14,11 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
 
-  late final List<Widget> _pages = const [
+  late final List<Widget> _pages = [
     TaskPage(),
-    FocusPage(),
-    CalendarPage(),
-    CountdownPage(),
+    const FocusPage(),
+    const CalendarPage(),
+    const CountdownPage(),
   ];
 
   static const List<_TabItem> _tabs = <_TabItem>[
