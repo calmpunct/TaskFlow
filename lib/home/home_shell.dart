@@ -28,14 +28,14 @@ class _HomeShellState extends State<HomeShell> {
     ),
     const FocusPage(),
     const CalendarPage(),
-    const CountdownPage(),
+    CountdownPage(),
   ];
 
   static const List<_TabItem> _tabs = <_TabItem>[
     _TabItem(label: '任务', icon: Icons.checklist_rounded),
     _TabItem(label: '专注', icon: Icons.timer_rounded),
     _TabItem(label: '日历', icon: Icons.calendar_month_rounded),
-    _TabItem(label: '倒数日', icon: Icons.flag_rounded),
+    _TabItem(label: '纪念日', icon: Icons.flag_rounded),
   ];
 
   @override

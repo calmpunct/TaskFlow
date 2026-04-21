@@ -45,7 +45,7 @@ void main() {
     expect(find.text('任务'), findsWidgets);
     expect(find.text('专注'), findsOneWidget);
     expect(find.text('日历'), findsOneWidget);
-    expect(find.text('倒数日'), findsOneWidget);
+    expect(find.text('纪念日'), findsOneWidget);
     expect(find.text('添加任务'), findsOneWidget);
 
     await tester.tap(find.text('专注'));
@@ -56,8 +56,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('日历 页面'), findsOneWidget);
 
-    await tester.tap(find.text('倒数日'));
+    await tester.tap(find.text('纪念日'));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('倒数日 页面'), findsOneWidget);
+    expect(find.text('添加纪念日'), findsOneWidget);
   });
 }

@@ -1,4 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:taskflow/models/anniversary_item.dart';
 import 'package:taskflow/models/task_item.dart';
 
 abstract class TaskRepository {
@@ -9,6 +10,10 @@ abstract class TaskRepository {
   Future<List<String>> loadCustomLists();
 
   Future<void> saveCustomLists(List<String> lists);
+
+  Future<List<AnniversaryItem>> loadAnniversaries();
+
+  Future<void> saveAnniversaries(List<AnniversaryItem> anniversaries);
 }
 
 class HiveTaskRepository implements TaskRepository {
@@ -19,6 +24,7 @@ class HiveTaskRepository implements TaskRepository {
   static const String _boxName = 'taskflow_storage_v1';
   static const String _storageKey = 'task_items';
   static const String _listStorageKey = 'task_lists';
+  static const String _anniversaryStorageKey = 'anniversary_items';
   static final HiveTaskRepository _instance = HiveTaskRepository._();
   Future<Box<dynamic>>? _openBoxFuture;
 
@@ -69,6 +75,27 @@ class HiveTaskRepository implements TaskRepository {
     final box = await _openBox();
     await box.put(_listStorageKey, lists);
   }
+
+  @override
+  Future<List<AnniversaryItem>> loadAnniversaries() async {
+    final box = await _openBox();
+    final raw = box.get(_anniversaryStorageKey) as String?;
+    if (raw == null || raw.isEmpty) {
+      return <AnniversaryItem>[];
+    }
+
+    try {
+      return AnniversaryItem.decodeList(raw);
+    } catch (_) {
+      return <AnniversaryItem>[];
+    }
+  }
+
+  @override
+  Future<void> saveAnniversaries(List<AnniversaryItem> anniversaries) async {
+    final box = await _openBox();
+    await box.put(_anniversaryStorageKey, AnniversaryItem.encodeList(anniversaries));
+  }
 }
 
 class InMemoryTaskRepository implements TaskRepository {
@@ -78,6 +105,7 @@ class InMemoryTaskRepository implements TaskRepository {
 
   List<TaskItem> _tasks;
   List<String> _lists;
+  List<AnniversaryItem> _anniversaries = <AnniversaryItem>[];
 
   @override
   Future<List<TaskItem>> loadTasks() async {
@@ -97,5 +125,15 @@ class InMemoryTaskRepository implements TaskRepository {
   @override
   Future<void> saveCustomLists(List<String> lists) async {
     _lists = List<String>.from(lists);
+  }
+
+  @override
+  Future<List<AnniversaryItem>> loadAnniversaries() async {
+    return List<AnniversaryItem>.from(_anniversaries);
+  }
+
+  @override
+  Future<void> saveAnniversaries(List<AnniversaryItem> anniversaries) async {
+    _anniversaries = List<AnniversaryItem>.from(anniversaries);
   }
 }
