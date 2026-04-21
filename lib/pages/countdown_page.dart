@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:taskflow/data/task_repository.dart';
 import 'package:taskflow/models/anniversary_item.dart';
+import 'package:taskflow/pages/anniversary_detail_page.dart';
 import 'package:taskflow/pages/anniversary_editor_sheet.dart';
 
 class CountdownPage extends StatefulWidget {
@@ -55,31 +56,22 @@ class _CountdownPageState extends State<CountdownPage> {
                   separatorBuilder: (context, index) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final item = items[index];
+                    final isBirthday = item.isBirthday;
                     return Card(
                       child: ListTile(
-                        onTap: () => _openEditor(item),
+                        onTap: () => _openDetail(item),
                         leading: _buildLeading(item),
-                        title: Text(item.name),
-                        subtitle: Text(_buildSubtitle(item)),
+                        title: isBirthday
+                            ? _buildBirthdayTitleRow(item)
+                            : Text(_buildTitle(item)),
+                        subtitle: isBirthday ? null : Text(_buildSubtitle(item)),
                         trailing: Wrap(
                           spacing: 8,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             if (item.isPinned)
                               const Icon(Icons.push_pin_rounded, size: 18),
-                            PopupMenuButton<_AnniversaryAction>(
-                              onSelected: (action) => _onAction(item, action),
-                              itemBuilder: (_) => const [
-                                PopupMenuItem<_AnniversaryAction>(
-                                  value: _AnniversaryAction.edit,
-                                  child: Text('编辑'),
-                                ),
-                                PopupMenuItem<_AnniversaryAction>(
-                                  value: _AnniversaryAction.delete,
-                                  child: Text('删除'),
-                                ),
-                              ],
-                            ),
+                            if (!isBirthday) const Icon(Icons.chevron_right_rounded),
                           ],
                         ),
                       ),
@@ -131,20 +123,52 @@ class _CountdownPageState extends State<CountdownPage> {
     );
   }
 
+  String _buildTitle(AnniversaryItem item) {
+    if (!item.isBirthday) {
+      return item.name;
+    }
+    return '${item.name} (${_nextAge(item)}岁)';
+  }
+
   String _buildSubtitle(AnniversaryItem item) {
-    final days = _daysUntil(item.date);
-    final datePart = '日期: ${_formatDate(item.date)}';
-    final dayPart = days == 0 ? '今天' : '还有 $days 天';
-    final reminderPart = '提醒: ${item.reminder.label}';
-    final notePart = item.note.isEmpty ? '' : ' | ${item.note}';
-    return '$datePart | $dayPart | $reminderPart$notePart';
+    return '${_buildDayStatus(item.date).text}  提醒: ${item.reminderText}';
+  }
+
+  Widget _buildBirthdayTitleRow(AnniversaryItem item) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            _buildTitle(item),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (_hasReminder(item)) ...[
+          const SizedBox(width: 8),
+          const Icon(Icons.notifications_active_rounded, size: 18),
+        ],
+        const SizedBox(width: 8),
+        Text('剩余：${_daysUntilNext(item.date)}天'),
+      ],
+    );
+  }
+
+  bool _hasReminder(AnniversaryItem item) {
+    return item.reminders.any((option) => option != ReminderOption.none);
+  }
+
+  int _daysUntilNext(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _nextOccurrence(date).difference(today).inDays;
   }
 
   Future<void> _openEditor([AnniversaryItem? item]) async {
     final saved = await showModalBottomSheet<AnniversaryItem>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => AnniversaryEditorSheet(initialItem: item),
+      builder: (context) => AnniversaryEditorSheet(initialItem: item),
     );
 
     if (!mounted || saved == null) {
@@ -164,17 +188,34 @@ class _CountdownPageState extends State<CountdownPage> {
     await widget.repository.saveAnniversaries(_anniversaries);
   }
 
-  Future<void> _onAction(AnniversaryItem item, _AnniversaryAction action) async {
-    switch (action) {
-      case _AnniversaryAction.edit:
-        await _openEditor(item);
-        break;
-      case _AnniversaryAction.delete:
-        setState(() {
-          _anniversaries = _anniversaries.where((value) => value.id != item.id).toList();
-        });
-        await widget.repository.saveAnniversaries(_anniversaries);
-        break;
+  Future<void> _openDetail(AnniversaryItem item) async {
+    final result = await Navigator.of(context).push<AnniversaryDetailResult>(
+      MaterialPageRoute<AnniversaryDetailResult>(
+        builder: (context) => AnniversaryDetailPage(item: item),
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    if (result.deleted) {
+      setState(() {
+        _anniversaries =
+            _anniversaries.where((current) => current.id != item.id).toList();
+      });
+      await widget.repository.saveAnniversaries(_anniversaries);
+      return;
+    }
+
+    if (result.item != null) {
+      setState(() {
+        _anniversaries = _anniversaries
+            .map((current) => current.id == result.item!.id ? result.item! : current)
+            .toList();
+        _anniversaries = _sorted(_anniversaries);
+      });
+      await widget.repository.saveAnniversaries(_anniversaries);
     }
   }
 
@@ -184,26 +225,49 @@ class _CountdownPageState extends State<CountdownPage> {
       if (a.isPinned != b.isPinned) {
         return a.isPinned ? -1 : 1;
       }
-      return _daysUntil(a.date).compareTo(_daysUntil(b.date));
+      final dayA = _buildDayStatus(a.date);
+      final dayB = _buildDayStatus(b.date);
+      if (dayA.isUpcoming != dayB.isUpcoming) {
+        return dayA.isUpcoming ? -1 : 1;
+      }
+      return dayA.days.compareTo(dayB.days);
     });
     return copied;
   }
 
-  int _daysUntil(DateTime date) {
+  _DayStatus _buildDayStatus(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final thisYear = DateTime(today.year, date.month, date.day);
+    if (today.isAfter(thisYear)) {
+      final passed = today.difference(thisYear).inDays;
+      return _DayStatus(days: passed, isUpcoming: false, text: '已过天数$passed');
+    }
+
+    final days = thisYear.difference(today).inDays;
+    return _DayStatus(days: days, isUpcoming: true, text: '天数$days');
+  }
+
+  int _nextAge(AnniversaryItem item) {
+    final nextOccurrence = _nextOccurrence(item.date);
+    return nextOccurrence.year - item.date.year;
+  }
+
+  DateTime _nextOccurrence(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     var target = DateTime(today.year, date.month, date.day);
     if (target.isBefore(today)) {
       target = DateTime(today.year + 1, date.month, date.day);
     }
-    return target.difference(today).inDays;
-  }
-
-  String _formatDate(DateTime value) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return '${value.year}-${twoDigits(value.month)}-${twoDigits(value.day)}';
+    return target;
   }
 }
 
-enum _AnniversaryAction { edit, delete }
+class _DayStatus {
+  const _DayStatus({required this.days, required this.isUpcoming, required this.text});
 
+  final int days;
+  final bool isUpcoming;
+  final String text;
+}

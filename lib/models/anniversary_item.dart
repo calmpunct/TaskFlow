@@ -33,7 +33,8 @@ class AnniversaryItem {
     required this.createdAt,
     this.note = '',
     this.isPinned = false,
-    this.reminder = ReminderOption.none,
+    this.isBirthday = false,
+    this.reminders = const <ReminderOption>[ReminderOption.none],
     this.iconType = AnniversaryIconType.builtIn,
     this.iconCodePoint,
     this.iconFontFamily,
@@ -46,11 +47,19 @@ class AnniversaryItem {
   final DateTime createdAt;
   final String note;
   final bool isPinned;
-  final ReminderOption reminder;
+  final bool isBirthday;
+  final List<ReminderOption> reminders;
   final AnniversaryIconType iconType;
   final int? iconCodePoint;
   final String? iconFontFamily;
   final String? imagePath;
+
+  String get reminderText {
+    if (reminders.isEmpty) {
+      return ReminderOption.none.label;
+    }
+    return reminders.map((option) => option.label).join('、');
+  }
 
   IconData get builtInIcon => IconData(
         iconCodePoint ?? Icons.flag_rounded.codePoint,
@@ -64,7 +73,8 @@ class AnniversaryItem {
     DateTime? createdAt,
     String? note,
     bool? isPinned,
-    ReminderOption? reminder,
+    bool? isBirthday,
+    List<ReminderOption>? reminders,
     AnniversaryIconType? iconType,
     int? iconCodePoint,
     String? iconFontFamily,
@@ -78,7 +88,8 @@ class AnniversaryItem {
       createdAt: createdAt ?? this.createdAt,
       note: note ?? this.note,
       isPinned: isPinned ?? this.isPinned,
-      reminder: reminder ?? this.reminder,
+      isBirthday: isBirthday ?? this.isBirthday,
+      reminders: reminders ?? this.reminders,
       iconType: iconType ?? this.iconType,
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       iconFontFamily: iconFontFamily ?? this.iconFontFamily,
@@ -94,7 +105,8 @@ class AnniversaryItem {
       'createdAt': createdAt.toIso8601String(),
       'note': note,
       'isPinned': isPinned,
-      'reminder': reminder.name,
+      'isBirthday': isBirthday,
+      'reminders': reminders.map((option) => option.name).toList(),
       'iconType': iconType.name,
       'iconCodePoint': iconCodePoint,
       'iconFontFamily': iconFontFamily,
@@ -103,6 +115,24 @@ class AnniversaryItem {
   }
 
   factory AnniversaryItem.fromJson(Map<String, dynamic> json) {
+    final reminderRaw = json['reminders'];
+    final reminderList = reminderRaw is List
+        ? reminderRaw
+            .map((value) => ReminderOption.values.firstWhere(
+                  (option) => option.name == value,
+                  orElse: () => ReminderOption.none,
+                ))
+            .toList()
+        : <ReminderOption>[];
+    if (reminderList.isEmpty) {
+      reminderList.add(
+        ReminderOption.values.firstWhere(
+          (value) => value.name == json['reminder'],
+          orElse: () => ReminderOption.none,
+        ),
+      );
+    }
+
     return AnniversaryItem(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -110,10 +140,8 @@ class AnniversaryItem {
       createdAt: DateTime.parse(json['createdAt'] as String),
       note: (json['note'] as String?) ?? '',
       isPinned: (json['isPinned'] as bool?) ?? false,
-      reminder: ReminderOption.values.firstWhere(
-        (value) => value.name == json['reminder'],
-        orElse: () => ReminderOption.none,
-      ),
+      isBirthday: (json['isBirthday'] as bool?) ?? false,
+      reminders: reminderList.toSet().toList(),
       iconType: AnniversaryIconType.values.firstWhere(
         (value) => value.name == json['iconType'],
         orElse: () => AnniversaryIconType.builtIn,

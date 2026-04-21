@@ -35,7 +35,8 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
 
   late DateTime _selectedDate;
   late bool _isPinned;
-  late ReminderOption _reminder;
+  late bool _isBirthday;
+  late Set<ReminderOption> _reminders;
   late AnniversaryIconType _iconType;
   late IconData _selectedIcon;
   String? _imagePath;
@@ -48,7 +49,9 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
     _noteController = TextEditingController(text: initial?.note ?? '');
     _selectedDate = initial?.date ?? DateTime.now();
     _isPinned = initial?.isPinned ?? false;
-    _reminder = initial?.reminder ?? ReminderOption.none;
+    _isBirthday = initial?.isBirthday ?? false;
+    _reminders = (initial?.reminders ?? const <ReminderOption>[ReminderOption.none])
+        .toSet();
     _iconType = initial?.iconType ?? AnniversaryIconType.builtIn;
     _selectedIcon = initial?.builtInIcon ?? Icons.flag_rounded;
     _imagePath = initial?.imagePath;
@@ -120,12 +123,22 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
                   });
                 },
               ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('这是生日'),
+                value: _isBirthday,
+                onChanged: (value) {
+                  setState(() {
+                    _isBirthday = value;
+                  });
+                },
+              ),
               const SizedBox(height: 4),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.notifications_active_rounded),
                 title: const Text('提醒'),
-                subtitle: Text(_reminder.label),
+                subtitle: Text(_formatReminders(_reminders.toList())),
                 onTap: _pickReminder,
               ),
               const SizedBox(height: 8),
@@ -270,23 +283,64 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
   }
 
   Future<void> _pickReminder() async {
-    final picked = await showModalBottomSheet<ReminderOption>(
+    final picked = await showModalBottomSheet<List<ReminderOption>>(
       context: context,
       builder: (context) {
+        final tempSelection = Set<ReminderOption>.from(_reminders);
         return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: ReminderOption.values
-                .map(
-                  (option) => ListTile(
-                    title: Text(option.label),
-                    trailing: option == _reminder
-                        ? const Icon(Icons.check_rounded)
-                        : null,
-                    onTap: () => Navigator.of(context).pop(option),
-                  ),
-                )
-                .toList(),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '选择提醒（可多选）',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    ...ReminderOption.values.map(
+                      (option) => CheckboxListTile(
+                        value: tempSelection.contains(option),
+                        title: Text(option.label),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (checked) {
+                          setModalState(() {
+                            if (checked == true) {
+                              if (option == ReminderOption.none) {
+                                tempSelection
+                                  ..clear()
+                                  ..add(ReminderOption.none);
+                              } else {
+                                tempSelection
+                                  ..remove(ReminderOption.none)
+                                  ..add(option);
+                              }
+                            } else {
+                              tempSelection.remove(option);
+                            }
+
+                            if (tempSelection.isEmpty) {
+                              tempSelection.add(ReminderOption.none);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(context).pop(tempSelection.toList()),
+                        child: const Text('确定'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         );
       },
@@ -297,7 +351,13 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
     }
 
     setState(() {
-      _reminder = picked;
+      _reminders = picked.toSet();
+      if (_reminders.isEmpty) {
+        _reminders = <ReminderOption>{ReminderOption.none};
+      }
+      _reminders = ReminderOption.values
+          .where((option) => _reminders.contains(option))
+          .toSet();
     });
   }
 
@@ -342,7 +402,10 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
           date: _selectedDate,
           note: _noteController.text.trim(),
           isPinned: _isPinned,
-          reminder: _reminder,
+          isBirthday: _isBirthday,
+          reminders: ReminderOption.values
+              .where((option) => _reminders.contains(option))
+              .toList(),
           iconType: _iconType,
           iconCodePoint: _selectedIcon.codePoint,
           iconFontFamily: _selectedIcon.fontFamily,
@@ -356,6 +419,16 @@ class _AnniversaryEditorSheetState extends State<AnniversaryEditorSheet> {
   String _formatDate(DateTime value) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     return '${value.year}-${twoDigits(value.month)}-${twoDigits(value.day)}';
+  }
+
+  String _formatReminders(List<ReminderOption> reminders) {
+    if (reminders.isEmpty) {
+      return ReminderOption.none.label;
+    }
+    final ordered = ReminderOption.values
+        .where((option) => reminders.contains(option))
+        .toList();
+    return ordered.map((option) => option.label).join('、');
   }
 }
 
