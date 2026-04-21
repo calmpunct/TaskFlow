@@ -5,26 +5,36 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:taskflow/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('Bottom navigation renders and switches tabs', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+
     await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('任务'), findsWidgets);
+    expect(find.text('专注'), findsOneWidget);
+    expect(find.text('日历'), findsOneWidget);
+    expect(find.text('倒数日'), findsOneWidget);
+    expect(find.text('整理今天的待办事项'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.text('专注'));
     await tester.pump();
+    expect(find.text('专注 页面'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('日历'));
+    await tester.pump();
+    expect(find.text('日历 页面'), findsOneWidget);
+
+    await tester.tap(find.text('倒数日'));
+    await tester.pump();
+    expect(find.text('倒数日 页面'), findsOneWidget);
   });
 }
