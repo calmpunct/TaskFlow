@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:taskflow/models/task_item.dart';
 
 abstract class TaskRepository {
@@ -11,16 +11,32 @@ abstract class TaskRepository {
   Future<void> saveCustomLists(List<String> lists);
 }
 
-class SharedPrefsTaskRepository implements TaskRepository {
-  const SharedPrefsTaskRepository();
+class HiveTaskRepository implements TaskRepository {
+  HiveTaskRepository._();
 
-  static const String _storageKey = 'task_items_v2';
-  static const String _listStorageKey = 'task_lists_v1';
+  factory HiveTaskRepository() => _instance;
+
+  static const String _boxName = 'taskflow_storage_v1';
+  static const String _storageKey = 'task_items';
+  static const String _listStorageKey = 'task_lists';
+  static final HiveTaskRepository _instance = HiveTaskRepository._();
+  Future<Box<dynamic>>? _openBoxFuture;
+
+  Future<Box<dynamic>> _openBox() async {
+    if (Hive.isBoxOpen(_boxName)) {
+      return Hive.box<dynamic>(_boxName);
+    }
+    _openBoxFuture ??= Hive.openBox<dynamic>(_boxName).catchError((Object error) {
+      _openBoxFuture = null;
+      throw error;
+    });
+    return _openBoxFuture!;
+  }
 
   @override
   Future<List<TaskItem>> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    final box = await _openBox();
+    final raw = box.get(_storageKey) as String?;
     if (raw == null || raw.isEmpty) {
       return <TaskItem>[];
     }
@@ -34,20 +50,24 @@ class SharedPrefsTaskRepository implements TaskRepository {
 
   @override
   Future<void> saveTasks(List<TaskItem> tasks) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, TaskItem.encodeList(tasks));
+    final box = await _openBox();
+    await box.put(_storageKey, TaskItem.encodeList(tasks));
   }
 
   @override
   Future<List<String>> loadCustomLists() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_listStorageKey) ?? <String>[];
+    final box = await _openBox();
+    final raw = box.get(_listStorageKey);
+    if (raw is List) {
+      return raw.whereType<String>().toList();
+    }
+    return <String>[];
   }
 
   @override
   Future<void> saveCustomLists(List<String> lists) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_listStorageKey, lists);
+    final box = await _openBox();
+    await box.put(_listStorageKey, lists);
   }
 }
 
@@ -79,4 +99,3 @@ class InMemoryTaskRepository implements TaskRepository {
     _lists = List<String>.from(lists);
   }
 }
-

@@ -5,17 +5,35 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:taskflow/main.dart';
 
 void main() {
+  late Directory hiveDir;
+
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    hiveDir = Directory.systemTemp.createTempSync('taskflow_widget_test_');
+    Hive.init(hiveDir.path);
+  });
+
+  tearDownAll(() async {
+    if (Hive.isBoxOpen('taskflow_storage_v1')) {
+      await Hive.box<dynamic>('taskflow_storage_v1').deleteFromDisk();
+    }
+    await Hive.close();
+    if (hiveDir.existsSync()) {
+      await hiveDir.delete(recursive: true);
+    }
+  });
+
   testWidgets('Bottom navigation renders and switches tabs', (
     WidgetTester tester,
   ) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
 
