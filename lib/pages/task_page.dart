@@ -580,6 +580,10 @@ class _TaskPageState extends State<TaskPage> {
          ),
        ),
      );
+     // Refresh data when returning from settings page
+     if (mounted) {
+       await _loadData();
+     }
    }
 
   void _showSnack(String message) {

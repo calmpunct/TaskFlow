@@ -6,9 +6,13 @@ class TaskSyncStatusPanel extends StatefulWidget {
   const TaskSyncStatusPanel({
     super.key,
     required this.syncEngine,
+    this.onSyncPressed,
+    this.isConfigured = false,
   });
 
   final SyncEngine syncEngine;
+  final VoidCallback? onSyncPressed;
+  final bool isConfigured;
 
   @override
   State<TaskSyncStatusPanel> createState() => _TaskSyncStatusPanelState();
@@ -53,6 +57,12 @@ class _TaskSyncStatusPanelState extends State<TaskSyncStatusPanel> {
                     ],
                   ),
                 ),
+                if (widget.onSyncPressed != null)
+                  IconButton.filled(
+                    onPressed: widget.isConfigured ? widget.onSyncPressed : null,
+                    tooltip: '立刻同步',
+                    icon: const Icon(Icons.sync_rounded),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
