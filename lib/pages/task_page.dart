@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:taskflow/data/sync/object_storage_config_manager.dart';
+import 'package:taskflow/data/sync/sync_config_repository.dart';
+import 'package:taskflow/data/sync/sync_engine.dart';
 import 'package:taskflow/data/task_repository.dart';
 import 'package:taskflow/models/task_item.dart';
 import 'package:taskflow/pages/settings_page.dart';
@@ -8,11 +11,17 @@ class TaskPage extends StatefulWidget {
   TaskPage({
     super.key,
     TaskRepository? repository,
+    SyncEngine? syncEngine,
+    SyncConfigRepository? syncConfigRepository,
     this.onDrawerChanged,
-  })
-      : repository = repository ?? DriftTaskRepository();
+  }) : repository = repository ?? DriftTaskRepository(),
+       syncEngine = syncEngine ?? NoopSyncEngine(),
+       syncConfigRepository =
+           syncConfigRepository ?? SharedPrefsSyncConfigRepository();
 
   final TaskRepository repository;
+  final SyncEngine syncEngine;
+  final SyncConfigRepository syncConfigRepository;
   final ValueChanged<bool>? onDrawerChanged;
 
   @override
@@ -27,6 +36,9 @@ class _TaskPageState extends State<TaskPage> {
   TaskFilter? _currentFilter = TaskFilter.inbox;
   String? _currentCustomList;
   bool _loading = true;
+  bool _syncing = false;
+
+  late ObjectStorageConfigManager _configManager;
 
   static const List<TaskFilter> _filters = <TaskFilter>[
     TaskFilter.today,
@@ -41,6 +53,10 @@ class _TaskPageState extends State<TaskPage> {
   @override
   void initState() {
     super.initState();
+    _configManager = ObjectStorageConfigManager(
+      configRepository: widget.syncConfigRepository,
+      syncEngine: widget.syncEngine,
+    );
     _loadData();
   }
 
@@ -48,8 +64,9 @@ class _TaskPageState extends State<TaskPage> {
     final loadedTasks = await widget.repository.loadTasks();
     final loadedLists = await widget.repository.loadCustomLists();
     final tasks = loadedTasks.isEmpty ? _seedTasks() : loadedTasks;
-    final lists = loadedLists.where((name) => name != _inboxListName).toSet().toList()
-      ..sort();
+    final lists =
+        loadedLists.where((name) => name != _inboxListName).toSet().toList()
+          ..sort();
 
     if (loadedTasks.isEmpty) {
       await widget.repository.saveTasks(tasks);
@@ -105,7 +122,10 @@ class _TaskPageState extends State<TaskPage> {
                       children: [
                         IconButton(
                           onPressed: () => _showComingSoon('我的信息'),
-                          icon: const Icon(Icons.notifications_active, color: Colors.white),
+                          icon: const Icon(
+                            Icons.notifications_active,
+                            color: Colors.white,
+                          ),
                           tooltip: '我的信息',
                         ),
                         IconButton(
@@ -147,49 +167,92 @@ class _TaskPageState extends State<TaskPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : filteredTasks.isEmpty
-              ? Center(
-                  child: Text(
-                    '${_currentCustomList ?? _currentFilter!.label}暂无任务',
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: filteredTasks.length,
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final task = filteredTasks[index];
-                    return Card(
-                      child: ListTile(
-                        onTap: () => _editTask(task),
-                        leading: Checkbox(
-                          value: task.status == TaskStatus.completed,
-                          onChanged: task.status == TaskStatus.trashed ||
-                                  task.status == TaskStatus.abandoned
-                              ? null
-                              : (checked) {
-                                  final status = (checked ?? false)
-                                      ? TaskStatus.completed
-                                      : TaskStatus.inbox;
-                                  _updateTask(task.copyWith(status: status));
-                                },
+          : RefreshIndicator(
+              onRefresh: _onRefresh,
+              child: filteredTasks.isEmpty
+                  ? ListView(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Center(
+                            child: Text(
+                              '${_currentCustomList ?? _currentFilter!.label}暂无任务',
+                            ),
+                          ),
                         ),
-                        title: Text(task.title),
-                        subtitle: Text(_buildSubtitle(task)),
-                        trailing: PopupMenuButton<_TaskAction>(
-                          onSelected: (action) => _onTaskAction(task, action),
-                          itemBuilder: (_) => _buildTaskActions(task),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                      ],
+                    )
+                  : ListView.separated(
+                      itemCount: filteredTasks.length,
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                      separatorBuilder: (_, index) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final task = filteredTasks[index];
+                        return Card(
+                          child: ListTile(
+                            onTap: () => _editTask(task),
+                            leading: Checkbox(
+                              value: task.status == TaskStatus.completed,
+                              onChanged:
+                                  task.status == TaskStatus.trashed ||
+                                      task.status == TaskStatus.abandoned
+                                  ? null
+                                  : (checked) {
+                                    final status = (checked ?? false)
+                                        ? TaskStatus.completed
+                                        : TaskStatus.inbox;
+                                    _updateTask(task.copyWith(status: status));
+                                  },
+                            ),
+                            title: Text(task.title),
+                            subtitle: Text(_buildSubtitle(task)),
+                            trailing: PopupMenuButton<_TaskAction>(
+                              onSelected: (action) => _onTaskAction(task, action),
+                              itemBuilder: (_) => _buildTaskActions(task),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createTask,
         icon: const Icon(Icons.add),
         label: const Text('添加任务'),
       ),
     );
+  }
+
+  /// 处理下拉刷新，触发同步
+  Future<void> _onRefresh() async {
+    if (_syncing) {
+      return;
+    }
+
+    setState(() {
+      _syncing = true;
+    });
+
+    try {
+      await _configManager.syncNow();
+      // 重新加载任务列表
+      await _loadData();
+      if (!mounted) {
+        return;
+      }
+      _showSnack('同步完成');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('同步失败: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _syncing = false;
+        });
+      }
+    }
   }
 
   Widget _buildSystemFilterTile(TaskFilter filter) {
@@ -292,7 +355,8 @@ class _TaskPageState extends State<TaskPage> {
   List<TaskItem> _applyListFilter(List<TaskItem> source, String listName) {
     return source
         .where(
-          (task) => task.status == TaskStatus.inbox && task.listName == listName,
+          (task) =>
+              task.status == TaskStatus.inbox && task.listName == listName,
         )
         .toList();
   }
@@ -355,7 +419,9 @@ class _TaskPageState extends State<TaskPage> {
             .where((task) => task.status == TaskStatus.completed)
             .toList();
       case TaskFilter.trashed:
-        return source.where((task) => task.status == TaskStatus.trashed).toList();
+        return source
+            .where((task) => task.status == TaskStatus.trashed)
+            .toList();
       case TaskFilter.abandoned:
         return source
             .where((task) => task.status == TaskStatus.abandoned)
@@ -464,16 +530,16 @@ class _TaskPageState extends State<TaskPage> {
       _currentFilter = TaskFilter.inbox;
       _currentCustomList = null;
     });
-    await widget.repository.createTask(created.copyWith(status: TaskStatus.inbox));
+    await widget.repository.createTask(
+      created.copyWith(status: TaskStatus.inbox),
+    );
   }
 
   Future<void> _editTask(TaskItem task) async {
     final updated = await Navigator.of(context).push<TaskItem>(
       MaterialPageRoute<TaskItem>(
-        builder: (_) => TaskDetailPage(
-          initialTask: task,
-          availableLists: _allLists,
-        ),
+        builder: (_) =>
+            TaskDetailPage(initialTask: task, availableLists: _allLists),
       ),
     );
     if (!mounted || updated == null) {
@@ -508,21 +574,18 @@ class _TaskPageState extends State<TaskPage> {
     Navigator.of(context).pop();
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => const SettingsPage(),
+        builder: (_) => SettingsPage(
+          configManager: _configManager,
+        ),
       ),
     );
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
-enum _TaskAction {
-  moveToInbox,
-  complete,
-  abandon,
-  trash,
-}
+enum _TaskAction { moveToInbox, complete, abandon, trash }

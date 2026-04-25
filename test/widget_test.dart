@@ -17,7 +17,7 @@ void main() {
   testWidgets('Bottom navigation renders and switches tabs', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp());
     for (var i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 100));
       if (find.text('整理今天的待办事项').evaluate().isNotEmpty) {

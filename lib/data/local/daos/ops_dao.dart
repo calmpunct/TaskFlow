@@ -5,17 +5,18 @@ class OpsDao extends DatabaseAccessor<AppDatabase> with _$OpsDaoMixin {
   OpsDao(super.db);
 
   Future<void> insertIdempotent(OpsCompanion entry) async {
-    await into(ops).insert(
-      entry,
-      onConflict: DoNothing(target: [ops.opId]),
-    );
+    await into(ops).insert(entry, onConflict: DoNothing(target: [ops.opId]));
   }
 
-  Future<List<Op>> replayByEntity(String entityTypeValue, String entityIdValue) {
+  Future<List<Op>> replayByEntity(
+    String entityTypeValue,
+    String entityIdValue,
+  ) {
     final query = select(ops)
       ..where(
         (o) =>
-            o.entityType.equals(entityTypeValue) & o.entityId.equals(entityIdValue),
+            o.entityType.equals(entityTypeValue) &
+            o.entityId.equals(entityIdValue),
       )
       ..orderBy([(o) => OrderingTerm.asc(o.createdAt)]);
     return query.get();
@@ -28,6 +29,19 @@ class OpsDao extends DatabaseAccessor<AppDatabase> with _$OpsDaoMixin {
     return query.watch();
   }
 
+  Future<List<Op>> getPendingOps() {
+    final query = select(ops)
+      ..where((o) => o.needsSync.equals(true))
+      ..orderBy([(o) => OrderingTerm.asc(o.createdAt)]);
+    return query.get();
+  }
+
+  Future<void> markSynced(String opIdValue) async {
+    await (update(ops)..where((o) => o.opId.equals(opIdValue))).write(
+      const OpsCompanion(needsSync: Value(false)),
+    );
+  }
+
   Future<void> markApplied(String opIdValue) async {
     await (update(ops)..where((o) => o.opId.equals(opIdValue))).write(
       OpsCompanion(
@@ -38,4 +52,3 @@ class OpsDao extends DatabaseAccessor<AppDatabase> with _$OpsDaoMixin {
     );
   }
 }
-

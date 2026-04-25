@@ -1,11 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:taskflow/data/sync/object_storage_config_manager.dart';
+import 'package:taskflow/data/sync/sync_config_repository.dart';
+import 'package:taskflow/data/sync/sync_engine.dart';
+import 'package:taskflow/data/task_repository.dart';
 import 'package:taskflow/pages/calendar_page.dart';
 import 'package:taskflow/pages/countdown_page.dart';
 import 'package:taskflow/pages/focus_page.dart';
 import 'package:taskflow/pages/task_page.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  HomeShell({
+    super.key,
+    TaskRepository? repository,
+    SyncEngine? syncEngine,
+    SyncConfigRepository? syncConfigRepository,
+    ObjectStorageConfigManager? configManager,
+  }) : repository = repository ?? DriftTaskRepository(),
+       syncEngine = syncEngine ?? NoopSyncEngine(),
+       syncConfigRepository =
+           syncConfigRepository ?? SharedPrefsSyncConfigRepository(),
+       configManager =
+           configManager ??
+           ObjectStorageConfigManager(
+             configRepository:
+                 syncConfigRepository ?? SharedPrefsSyncConfigRepository(),
+             syncEngine: syncEngine ?? NoopSyncEngine(),
+           );
+
+  final TaskRepository repository;
+  final SyncEngine syncEngine;
+  final SyncConfigRepository syncConfigRepository;
+  final ObjectStorageConfigManager configManager;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -17,6 +42,9 @@ class _HomeShellState extends State<HomeShell> {
 
   late final List<Widget> _pages = [
     TaskPage(
+      repository: widget.repository,
+      syncEngine: widget.syncEngine,
+      syncConfigRepository: widget.syncConfigRepository,
       onDrawerChanged: (isOpen) {
         if (_isTaskDrawerOpen == isOpen) {
           return;
@@ -28,7 +56,7 @@ class _HomeShellState extends State<HomeShell> {
     ),
     const FocusPage(),
     const CalendarPage(),
-    CountdownPage(),
+    CountdownPage(repository: widget.repository),
   ];
 
   static const List<_TabItem> _tabs = <_TabItem>[
@@ -39,12 +67,23 @@ class _HomeShellState extends State<HomeShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _syncOnEnter();
+  }
+
+  Future<void> _syncOnEnter() async {
+    try {
+      await widget.syncEngine.syncNow();
+    } catch (_) {
+      // Keep startup resilient; detailed error is already emitted by SyncEngine.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: _isTaskDrawerOpen
           ? null
           : BottomNavigationBar(
@@ -74,4 +113,3 @@ class _TabItem {
   final String label;
   final IconData icon;
 }
-
