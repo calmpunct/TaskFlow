@@ -32,6 +32,7 @@ class _ObjectStorageConfigPanelState extends State<ObjectStorageConfigPanel> {
   bool _loading = true;
   bool _saving = false;
   bool _testing = false;
+  bool _syncingNow = false;
 
   @override
   void initState() {
@@ -142,6 +143,45 @@ class _ObjectStorageConfigPanelState extends State<ObjectStorageConfigPanel> {
     }
   }
 
+  Future<void> _syncNow() async {
+    final formState = _formKey.currentState;
+    if (formState == null || !formState.validate()) {
+      return;
+    }
+
+    setState(() {
+      _syncingNow = true;
+    });
+
+    final config = _buildConfigFromForm();
+    try {
+      // Keep runtime config in sync with current form values before syncing.
+      await widget.configManager.saveConfig(config);
+
+      if (!config.enabled) {
+        _showSnack('请先开启对象存储同步');
+        return;
+      }
+
+      await widget.configManager.syncNow();
+      if (!mounted) {
+        return;
+      }
+      _showSnack('已触发立刻同步');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('同步失败: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _syncingNow = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return _loading
@@ -168,6 +208,35 @@ class _ObjectStorageConfigPanelState extends State<ObjectStorageConfigPanel> {
                     padding: const EdgeInsets.all(12),
                     child: Column(
                       children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'S3 配置',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: '立刻同步',
+                              onPressed: (_syncingNow || _saving || _testing)
+                                  ? null
+                                  : _syncNow,
+                              icon: _syncingNow
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.sync_rounded),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
                         _buildField(
                           controller: _endpointController,
                           label: 'Endpoint',
@@ -226,7 +295,7 @@ class _ObjectStorageConfigPanelState extends State<ObjectStorageConfigPanel> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: _testing ? null : _testConnection,
+                        onPressed: (_testing || _syncingNow) ? null : _testConnection,
                         icon: _testing
                             ? const SizedBox(
                                 width: 16,
@@ -242,7 +311,7 @@ class _ObjectStorageConfigPanelState extends State<ObjectStorageConfigPanel> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _saving ? null : _saveConfig,
+                        onPressed: (_saving || _syncingNow) ? null : _saveConfig,
                         icon: _saving
                             ? const SizedBox(
                                 width: 16,

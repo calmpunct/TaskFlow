@@ -6,6 +6,7 @@ import 'package:taskflow/data/local/app_database.dart';
 import 'package:taskflow/data/sync/s3_object_storage_client.dart';
 import 'package:taskflow/data/sync/sync_config_repository.dart';
 import 'package:taskflow/data/sync/sync_storage_config.dart';
+import 'package:taskflow/data/sync/sync_utils.dart';
 
 abstract class SyncEngine {
   Stream<SyncProgress> watchProgress();
@@ -115,6 +116,7 @@ class S3SyncEngine implements SyncEngine {
 
   SyncStorageConfig? _activeConfig;
   S3ObjectStorageClient? _client;
+  bool _isSyncing = false;
 
   @override
   Stream<SyncProgress> watchProgress() => _controller.stream;
@@ -127,91 +129,119 @@ class S3SyncEngine implements SyncEngine {
     await S3ObjectStorageClient(config).testConnection();
   }
 
-  @override
-  Future<void> pushPendingOps() async {
-    final client = await _requireClient();
-    final pendingOps = await _db.opsDao.getPendingOps();
-    if (pendingOps.isEmpty) {
-      _controller.add(
-        const SyncProgress(isSyncing: true, lastMessage: '没有需要上传的本地变更。'),
-      );
-      return;
-    }
+   @override
+   Future<void> pushPendingOps() async {
+     final client = await _requireClient();
+     final pendingOps = await _db.opsDao.getPendingOps();
+     if (pendingOps.isEmpty) {
+       _controller.add(
+         const SyncProgress(isSyncing: true, lastMessage: '没有需要上传的本地变更。'),
+       );
+       return;
+     }
 
-    final localSnapshot = await _exportLocalSnapshot();
-    final remoteRaw = await client.getText(_snapshotKey);
-    final remoteSnapshot = _decodeSnapshot(remoteRaw);
-    final merged = _mergeSnapshots(
-      remote: remoteSnapshot,
-      local: localSnapshot,
-      preferLocal: true,
-    );
+     // Track task status changes in pending ops
+     final statusChanges = <String>[];
+     for (final op in pendingOps) {
+       if (op.entityType == 'task' && op.action == 'update') {
+         try {
+           final payload = jsonDecode(op.payload) as Map<String, dynamic>;
+           final status = payload['status'] as String?;
+           if (status != null) {
+             statusChanges.add('${op.entityId}: → $status');
+           }
+         } catch (e) {
+           // Ignore parsing errors
+         }
+       }
+     }
 
-    final nextRevision = (remoteSnapshot?['revision'] as int? ?? 0) + 1;
-    final uploadPayload = <String, dynamic>{
-      'revision': nextRevision,
-      'updatedAt': DateTime.now().toUtc().toIso8601String(),
-      ...merged,
-    };
+     final localSnapshot = await _exportLocalSnapshot();
+     final remoteRaw = await client.getText(_snapshotKey);
+     final remoteSnapshot = _decodeSnapshot(remoteRaw);
+     final merged = _mergeSnapshots(
+       remote: remoteSnapshot,
+       local: localSnapshot,
+       preferLocal: true,
+     );
 
-    await client.putText(_snapshotKey, jsonEncode(uploadPayload));
-    await _db.transaction(() async {
-      for (final op in pendingOps) {
-        await _db.opsDao.markSynced(op.opId);
-      }
-      await _db.syncStateDao.updateGlobalState(
-        SyncStatesCompanion(
-          syncCursor: Value(nextRevision.toString()),
-          lastPushedOpAt: Value(DateTime.now()),
-        ),
-      );
-    });
-    _controller.add(
-      SyncProgress(
-        isSyncing: true,
-        lastMessage: '已上传 ${pendingOps.length} 条本地变更。',
-      ),
-    );
-  }
+     final nextRevision = (remoteSnapshot?['revision'] as int? ?? 0) + 1;
+     final uploadPayload = <String, dynamic>{
+       'revision': nextRevision,
+       'updatedAt': DateTime.now().toUtc().toIso8601String(),
+       ...merged,
+     };
 
-  @override
-  Future<void> pullRemoteOps() async {
-    final client = await _requireClient();
-    final remoteRaw = await client.getText(_snapshotKey);
-    if (remoteRaw == null || remoteRaw.trim().isEmpty) {
-      _controller.add(
-        const SyncProgress(isSyncing: true, lastMessage: '远端目录中暂无同步数据。'),
-      );
-      return;
-    }
+     await client.putText(_snapshotKey, jsonEncode(uploadPayload));
+     await _db.transaction(() async {
+       for (final op in pendingOps) {
+         await _db.opsDao.markSynced(op.opId);
+       }
+       await _db.syncStateDao.updateGlobalState(
+         SyncStatesCompanion(
+           syncCursor: Value(nextRevision.toString()),
+           lastPushedOpAt: Value(DateTime.now()),
+         ),
+       );
+     });
 
-    final remoteSnapshot = _decodeSnapshot(remoteRaw);
-    if (remoteSnapshot == null) {
-      return;
-    }
+     final message = statusChanges.isNotEmpty
+         ? '已上传 ${pendingOps.length} 条变更 (含状态变更: ${statusChanges.length})'
+         : '已上传 ${pendingOps.length} 条本地变更。';
 
-    final remoteRevision = remoteSnapshot['revision'] as int? ?? 0;
-    final state = await _db.syncStateDao.ensureGlobalState();
-    final localRevision = int.tryParse(state.syncCursor ?? '0') ?? 0;
+     _controller.add(
+       SyncProgress(
+         isSyncing: true,
+         lastMessage: message,
+       ),
+     );
+   }
 
-    if (remoteRevision <= localRevision) {
-      _controller.add(
-        const SyncProgress(isSyncing: true, lastMessage: '远端无新数据。'),
-      );
-      return;
-    }
+   @override
+   Future<void> pullRemoteOps() async {
+     final client = await _requireClient();
+     final remoteRaw = await client.getText(_snapshotKey);
+     if (remoteRaw == null || remoteRaw.trim().isEmpty) {
+       _controller.add(
+         const SyncProgress(isSyncing: true, lastMessage: '远端目录中暂无同步数据。'),
+       );
+       return;
+     }
 
-    await _applySnapshot(remoteSnapshot);
-    await _db.syncStateDao.updateGlobalState(
-      SyncStatesCompanion(
-        syncCursor: Value(remoteRevision.toString()),
-        lastPulledOpAt: Value(DateTime.now()),
-      ),
-    );
-    _controller.add(
-      SyncProgress(isSyncing: true, lastMessage: '已拉取远端版本 $remoteRevision。'),
-    );
-  }
+     final remoteSnapshot = _decodeSnapshot(remoteRaw);
+     if (remoteSnapshot == null) {
+       return;
+     }
+
+     final remoteRevision = remoteSnapshot['revision'] as int? ?? 0;
+     final state = await _db.syncStateDao.ensureGlobalState();
+     final localRevision = int.tryParse(state.syncCursor ?? '0') ?? 0;
+
+     if (remoteRevision <= localRevision) {
+       _controller.add(
+         const SyncProgress(isSyncing: true, lastMessage: '远端无新数据。'),
+       );
+       return;
+     }
+
+     // Analyze changes in remote snapshot
+     final remoteTaskCount = (remoteSnapshot['tasks'] as List<dynamic>? ?? []).length;
+     final analyzeMessage = '正在分析远端变更 (版本 $remoteRevision, 任务 $remoteTaskCount 条)...';
+     _controller.add(
+       SyncProgress(isSyncing: true, lastMessage: analyzeMessage),
+     );
+
+     await _applySnapshot(remoteSnapshot);
+     await _db.syncStateDao.updateGlobalState(
+       SyncStatesCompanion(
+         syncCursor: Value(remoteRevision.toString()),
+         lastPulledOpAt: Value(DateTime.now()),
+       ),
+     );
+     _controller.add(
+       SyncProgress(isSyncing: true, lastMessage: '已拉取并应用远端版本 $remoteRevision (任务 $remoteTaskCount 条)。'),
+     );
+   }
 
   @override
   Future<void> resolveConflicts() async {
@@ -222,20 +252,46 @@ class S3SyncEngine implements SyncEngine {
 
   @override
   Future<void> syncNow() async {
+    if (_isSyncing) {
+      _controller.add(
+        const SyncProgress(isSyncing: true, lastMessage: '已有同步任务正在进行，请稍候...'),
+      );
+      return;
+    }
+
+    _isSyncing = true;
     try {
+      await _db.syncStateDao.updateGlobalState(
+        SyncStatesCompanion(
+          isSyncing: const Value(true),
+          lastError: const Value(null),
+        ),
+      );
       _controller.add(
         const SyncProgress(isSyncing: true, lastMessage: '开始同步...'),
       );
       final config = await _configRepository.load();
       if (!config.enabled) {
+        await _db.syncStateDao.updateGlobalState(
+          SyncStatesCompanion(
+            isSyncing: const Value(false),
+            lastError: const Value('同步未启用'),
+          ),
+        );
         _controller.add(
-          const SyncProgress(isSyncing: false, lastMessage: '未启用对象存储同步。'),
+          const SyncProgress(isSyncing: false, lastMessage: '未启用对象存储同步，请先在设置中开启。'),
         );
         return;
       }
       if (!config.isComplete) {
+        await _db.syncStateDao.updateGlobalState(
+          SyncStatesCompanion(
+            isSyncing: const Value(false),
+            lastError: const Value('同步配置不完整'),
+          ),
+        );
         _controller.add(
-          const SyncProgress(isSyncing: false, lastMessage: '同步配置不完整，已跳过。'),
+          const SyncProgress(isSyncing: false, lastMessage: '同步配置不完整，请先保存完整的 S3 配置。'),
         );
         return;
       }
@@ -270,6 +326,8 @@ class S3SyncEngine implements SyncEngine {
         SyncProgress(isSyncing: false, lastMessage: '同步失败: $error'),
       );
       rethrow;
+    } finally {
+      _isSyncing = false;
     }
   }
 
@@ -286,19 +344,23 @@ class S3SyncEngine implements SyncEngine {
     return _client!;
   }
 
-  Future<Map<String, dynamic>> _exportLocalSnapshot() async {
-    final tasks = await _db.taskDao.getAllTasks();
-    final lists = await _db.customListDao.getAllNames();
-    final anniversaries = await _db.anniversaryDao.getAllAnniversaries();
+   Future<Map<String, dynamic>> _exportLocalSnapshot() async {
+     final tasks = await _db.taskDao.getAllTasks();
+     final lists = await _db.customListDao.getAllNames();
+     final anniversaries = await _db.anniversaryDao.getAllAnniversaries();
 
-    return <String, dynamic>{
-      'tasks': tasks.map((task) => _taskToMap(task)).toList(),
-      'customLists': lists,
-      'anniversaries': anniversaries
-          .map((item) => _anniversaryToMap(item))
-          .toList(),
-    };
-  }
+     return <String, dynamic>{
+       'tasks': tasks.map((task) {
+         final taskMap = _taskToMap(task);
+         // Enrich with countdown data for better sync tracking
+         return SyncUtils.enrichTaskWithCountdownData(taskMap);
+       }).toList(),
+       'customLists': lists,
+       'anniversaries': anniversaries
+           .map((item) => _anniversaryToMap(item))
+           .toList(),
+     };
+   }
 
   Map<String, dynamic>? _decodeSnapshot(String? raw) {
     if (raw == null || raw.trim().isEmpty) {

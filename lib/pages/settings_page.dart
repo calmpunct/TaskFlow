@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:taskflow/data/sync/object_storage_config_manager.dart';
+import 'package:taskflow/data/sync/sync_engine.dart';
 import 'package:taskflow/pages/sync_settings_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
     required this.configManager,
+    required this.syncEngine,
   });
 
   final ObjectStorageConfigManager configManager;
+  final SyncEngine syncEngine;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -33,6 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   MaterialPageRoute<void>(
                     builder: (_) => SyncSettingsPage(
                       configManager: widget.configManager,
+                      syncEngine: widget.syncEngine,
                     ),
                   ),
                 );

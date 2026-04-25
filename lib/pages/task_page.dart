@@ -570,16 +570,17 @@ class _TaskPageState extends State<TaskPage> {
     _showSnack('$label 功能即将上线');
   }
 
-  Future<void> _openSettingsPage() async {
-    Navigator.of(context).pop();
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => SettingsPage(
-          configManager: _configManager,
-        ),
-      ),
-    );
-  }
+   Future<void> _openSettingsPage() async {
+     Navigator.of(context).pop();
+     await Navigator.of(context).push<void>(
+       MaterialPageRoute<void>(
+         builder: (_) => SettingsPage(
+           configManager: _configManager,
+           syncEngine: widget.syncEngine,
+         ),
+       ),
+     );
+   }
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(
