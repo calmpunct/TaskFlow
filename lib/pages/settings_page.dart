@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:taskflow/data/sync/object_storage_config_manager.dart';
 import 'package:taskflow/data/sync/sync_engine.dart';
 import 'package:taskflow/pages/sync_settings_page.dart';
@@ -18,6 +19,28 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  String _applicationVersion = '未知版本';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApplicationVersion();
+  }
+
+  Future<void> _loadApplicationVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    final version = packageInfo.version;
+    final buildNumber = packageInfo.buildNumber;
+    final formattedVersion =
+        buildNumber.isEmpty ? version : '$version+$buildNumber';
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _applicationVersion = formattedVersion;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -54,7 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Taskflow',
-                  applicationVersion: '1.0.1',
+                  applicationVersion: _applicationVersion,
                   applicationLegalese:
                       'Taskflow - 一个任务清单与纪念日管理应用',
                   children: const [
