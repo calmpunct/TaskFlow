@@ -10,7 +10,7 @@ class TaskPage extends StatefulWidget {
     TaskRepository? repository,
     this.onDrawerChanged,
   })
-      : repository = repository ?? HiveTaskRepository();
+      : repository = repository ?? DriftTaskRepository();
 
   final TaskRepository repository;
   final ValueChanged<bool>? onDrawerChanged;
@@ -464,7 +464,7 @@ class _TaskPageState extends State<TaskPage> {
       _currentFilter = TaskFilter.inbox;
       _currentCustomList = null;
     });
-    await widget.repository.saveTasks(_tasks);
+    await widget.repository.createTask(created.copyWith(status: TaskStatus.inbox));
   }
 
   Future<void> _editTask(TaskItem task) async {
@@ -489,7 +489,7 @@ class _TaskPageState extends State<TaskPage> {
           .map((task) => task.id == updatedTask.id ? updatedTask : task)
           .toList();
     });
-    await widget.repository.saveTasks(_tasks);
+    await widget.repository.updateTask(updatedTask);
   }
 
   List<String> get _allLists => <String>[_inboxListName, ..._customLists];

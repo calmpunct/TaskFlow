@@ -8,7 +8,7 @@ import 'package:taskflow/pages/anniversary_editor_sheet.dart';
 
 class CountdownPage extends StatefulWidget {
   CountdownPage({super.key, TaskRepository? repository})
-      : repository = repository ?? HiveTaskRepository();
+      : repository = repository ?? DriftTaskRepository();
 
   final TaskRepository repository;
 
