@@ -7,6 +7,8 @@ import 'package:taskflow/models/task_item.dart';
 import 'package:taskflow/pages/settings_page.dart';
 import 'package:taskflow/pages/task_detail_page.dart';
 
+typedef TaskSyncAction = Future<void> Function();
+
 class TaskPage extends StatefulWidget {
   TaskPage({
     super.key,
@@ -14,6 +16,7 @@ class TaskPage extends StatefulWidget {
     SyncEngine? syncEngine,
     SyncConfigRepository? syncConfigRepository,
     this.onDrawerChanged,
+    this.onSyncActionChanged,
   }) : repository = repository ?? DriftTaskRepository(),
        syncEngine = syncEngine ?? NoopSyncEngine(),
        syncConfigRepository =
@@ -23,6 +26,7 @@ class TaskPage extends StatefulWidget {
   final SyncEngine syncEngine;
   final SyncConfigRepository syncConfigRepository;
   final ValueChanged<bool>? onDrawerChanged;
+  final ValueChanged<TaskSyncAction?>? onSyncActionChanged;
 
   @override
   State<TaskPage> createState() => _TaskPageState();
@@ -58,6 +62,17 @@ class _TaskPageState extends State<TaskPage> {
       syncEngine: widget.syncEngine,
     );
     _loadData();
+    widget.onSyncActionChanged?.call(_syncFromExternalTrigger);
+  }
+
+  @override
+  void dispose() {
+    widget.onSyncActionChanged?.call(null);
+    super.dispose();
+  }
+
+  bool _isWideLayout(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 900;
   }
 
   Future<void> _loadData() async {
@@ -85,136 +100,55 @@ class _TaskPageState extends State<TaskPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isWideLayout = _isWideLayout(context);
     final filteredTasks = _currentCustomList == null
         ? _applySystemFilter(_tasks, _currentFilter!)
         : _applyListFilter(_tasks, _currentCustomList!);
+    final content = _buildTaskListContent(filteredTasks);
+    final bodyContent = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : isWideLayout
+        ? Row(
+            children: [
+              SizedBox(width: 320, child: _buildFilterPanel(context)),
+              const VerticalDivider(width: 1),
+              Expanded(child: content),
+            ],
+          )
+        : content;
 
     return Scaffold(
-      drawerEnableOpenDragGesture: true,
+      drawerEnableOpenDragGesture: !isWideLayout,
       drawerEdgeDragWidth: MediaQuery.of(context).size.width * 0.3,
-      onDrawerChanged: widget.onDrawerChanged,
-      drawer: Drawer(
-        width: MediaQuery.of(context).size.width * 0.8,
-        child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              DrawerHeader(
-                decoration: const BoxDecoration(color: Colors.deepPurple),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 24,
-                          child: Icon(Icons.person_rounded),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Taskflow 用户',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => _showComingSoon('我的信息'),
-                          icon: const Icon(
-                            Icons.notifications_active,
-                            color: Colors.white,
-                          ),
-                          tooltip: '我的信息',
-                        ),
-                        IconButton(
-                          onPressed: _openSettingsPage,
-                          icon: const Icon(Icons.settings, color: Colors.white),
-                          tooltip: '设置',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              ..._filters.map(_buildSystemFilterTile),
-              const Divider(height: 16),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Text('我的清单'),
-              ),
-              ..._customLists.map(_buildCustomListTile),
-              ListTile(
-                leading: const Icon(Icons.add_rounded),
-                title: const Text('创建清单'),
-                onTap: _createCustomList,
-              ),
-            ],
-          ),
-        ),
-      ),
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        leading: Builder(
-          builder: (context) => IconButton(
-            tooltip: '打开侧边栏',
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        title: Text(_currentCustomList ?? _currentFilter!.label),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _onRefresh,
-              child: filteredTasks.isEmpty
-                  ? ListView(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Center(
-                            child: Text(
-                              '${_currentCustomList ?? _currentFilter!.label}暂无任务',
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : ListView.separated(
-                      itemCount: filteredTasks.length,
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                      separatorBuilder: (_, index) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final task = filteredTasks[index];
-                        return Card(
-                          child: ListTile(
-                            onTap: () => _editTask(task),
-                            leading: Checkbox(
-                              value: task.status == TaskStatus.completed,
-                              onChanged:
-                                  task.status == TaskStatus.trashed ||
-                                      task.status == TaskStatus.abandoned
-                                  ? null
-                                  : (checked) {
-                                    final status = (checked ?? false)
-                                        ? TaskStatus.completed
-                                        : TaskStatus.inbox;
-                                    _updateTask(task.copyWith(status: status));
-                                  },
-                            ),
-                            title: Text(task.title),
-                            subtitle: Text(_buildSubtitle(task)),
-                            trailing: PopupMenuButton<_TaskAction>(
-                              onSelected: (action) => _onTaskAction(task, action),
-                              itemBuilder: (_) => _buildTaskActions(task),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+      onDrawerChanged: isWideLayout ? null : widget.onDrawerChanged,
+      drawer: isWideLayout
+          ? null
+          : Drawer(
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: SafeArea(child: _buildFilterPanel(context)),
             ),
+       appBar: AppBar(
+         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+         leading: isWideLayout
+             ? null
+             : Builder(
+                 builder: (context) => IconButton(
+                   tooltip: '打开侧边栏',
+                   icon: const Icon(Icons.menu),
+                   onPressed: () => Scaffold.of(context).openDrawer(),
+                 ),
+               ),
+         title: Text(_currentCustomList ?? _currentFilter!.label),
+         actions: [
+           if (!isWideLayout)
+             IconButton(
+               icon: const Icon(Icons.settings_rounded),
+               tooltip: '设置',
+               onPressed: _openSettingsPage,
+             ),
+         ],
+       ),
+      body: bodyContent,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createTask,
         icon: const Icon(Icons.add),
@@ -223,8 +157,85 @@ class _TaskPageState extends State<TaskPage> {
     );
   }
 
+   Widget _buildFilterPanel(BuildContext context) {
+     return ListView(
+       padding: EdgeInsets.zero,
+       children: [
+         ..._filters.map(_buildSystemFilterTile),
+        const Divider(height: 16),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Text('我的清单'),
+        ),
+        ..._customLists.map(_buildCustomListTile),
+        ListTile(
+          leading: const Icon(Icons.add_rounded),
+          title: const Text('创建清单'),
+          onTap: _createCustomList,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTaskListContent(List<TaskItem> filteredTasks) {
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: filteredTasks.isEmpty
+          ? ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Center(
+                    child: Text('${_currentCustomList ?? _currentFilter!.label}暂无任务'),
+                  ),
+                ),
+              ],
+            )
+          : ListView.separated(
+              itemCount: filteredTasks.length,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+              separatorBuilder: (_, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final task = filteredTasks[index];
+                return Card(
+                  child: ListTile(
+                    onTap: () => _editTask(task),
+                    leading: Checkbox(
+                      value: task.status == TaskStatus.completed,
+                      onChanged: task.status == TaskStatus.trashed ||
+                              task.status == TaskStatus.abandoned
+                          ? null
+                          : (checked) {
+                              final status =
+                                  (checked ?? false)
+                                      ? TaskStatus.completed
+                                      : TaskStatus.inbox;
+                              _updateTask(task.copyWith(status: status));
+                            },
+                    ),
+                    title: Text(task.title),
+                    subtitle: Text(_buildSubtitle(task)),
+                    trailing: PopupMenuButton<_TaskAction>(
+                      onSelected: (action) => _onTaskAction(task, action),
+                      itemBuilder: (_) => _buildTaskActions(task),
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Future<void> _syncFromExternalTrigger() {
+    return _syncTasks(showSnack: true);
+  }
+
   /// 处理下拉刷新，触发同步
-  Future<void> _onRefresh() async {
+  Future<void> _onRefresh() {
+    return _syncTasks(showSnack: true);
+  }
+
+  Future<void> _syncTasks({required bool showSnack}) async {
     if (_syncing) {
       return;
     }
@@ -235,17 +246,20 @@ class _TaskPageState extends State<TaskPage> {
 
     try {
       await _configManager.syncNow();
-      // 重新加载任务列表
       await _loadData();
       if (!mounted) {
         return;
       }
-      _showSnack('同步完成');
+      if (showSnack) {
+        _showSnack('同步完成');
+      }
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showSnack('同步失败: $error');
+      if (showSnack) {
+        _showSnack('同步失败: $error');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -265,7 +279,7 @@ class _TaskPageState extends State<TaskPage> {
           _currentFilter = filter;
           _currentCustomList = null;
         });
-        Navigator.of(context).pop();
+        _closeDrawerIfNeeded();
       },
     );
   }
@@ -279,9 +293,16 @@ class _TaskPageState extends State<TaskPage> {
         setState(() {
           _currentCustomList = listName;
         });
-        Navigator.of(context).pop();
+        _closeDrawerIfNeeded();
       },
     );
+  }
+
+  void _closeDrawerIfNeeded() {
+    if (_isWideLayout(context)) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _createCustomList() async {
@@ -570,21 +591,22 @@ class _TaskPageState extends State<TaskPage> {
     _showSnack('$label 功能即将上线');
   }
 
-   Future<void> _openSettingsPage() async {
-     Navigator.of(context).pop();
-     await Navigator.of(context).push<void>(
-       MaterialPageRoute<void>(
-         builder: (_) => SettingsPage(
-           configManager: _configManager,
-           syncEngine: widget.syncEngine,
-         ),
-       ),
-     );
-     // Refresh data when returning from settings page
-     if (mounted) {
-       await _loadData();
-     }
-   }
+  Future<void> _openSettingsPage() async {
+    if (!_isWideLayout(context)) {
+      Navigator.of(context).pop();
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsPage(
+          configManager: _configManager,
+          syncEngine: widget.syncEngine,
+        ),
+      ),
+    );
+    if (mounted) {
+      await _loadData();
+    }
+  }
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(
