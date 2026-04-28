@@ -23,6 +23,27 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   bool _autoSync = false;
   bool _loading = true;
 
+  void _handleBack() {
+    final navigator = Navigator.of(context);
+    debugPrint('[SyncSettingsPage] back: canPop=${navigator.canPop()}');
+    if (navigator.canPop()) {
+      debugPrint('[SyncSettingsPage] back: pop current navigator');
+      navigator.pop();
+      return;
+    }
+
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    debugPrint('[SyncSettingsPage] back: root canPop=${rootNavigator.canPop()}');
+    if (rootNavigator.canPop()) {
+      debugPrint('[SyncSettingsPage] back: pop root navigator');
+      rootNavigator.pop();
+      return;
+    }
+
+    debugPrint('[SyncSettingsPage] back: popUntil first on root');
+    rootNavigator.popUntil((route) => route.isFirst);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -126,9 +147,26 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('同步设置')),
-        body: const Center(child: CircularProgressIndicator()),
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          debugPrint('[SyncSettingsPage] system back: didPop=$didPop');
+          if (didPop) return;
+          _handleBack();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                debugPrint('[SyncSettingsPage] appBar back tapped');
+                _handleBack();
+              },
+            ),
+            title: const Text('同步设置'),
+          ),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
@@ -138,75 +176,92 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
                          _config!.accessKey.isNotEmpty &&
                          _config!.secretKey.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('同步设置')),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // S3 Configuration Card
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.cloud_rounded),
-                  title: const Text('S3 配置'),
-                  subtitle: Text(
-                    isConfigured ? '已配置' : '未配置',
-                    style: TextStyle(
-                      color: isConfigured ? Colors.green : Colors.orange,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: _showS3ConfigDialog,
-                ),
-              ),
-              
-              if (!isConfigured)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, left: 16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_rounded, 
-                        size: 16, 
-                        color: Colors.orange,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        debugPrint('[SyncSettingsPage] system back: didPop=$didPop');
+        if (didPop) return;
+        _handleBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              debugPrint('[SyncSettingsPage] appBar back tapped');
+              _handleBack();
+            },
+          ),
+          title: const Text('同步设置'),
+        ),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // S3 Configuration Card
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud_rounded),
+                    title: const Text('S3 配置'),
+                    subtitle: Text(
+                      isConfigured ? '已配置' : '未配置',
+                      style: TextStyle(
+                        color: isConfigured ? Colors.green : Colors.orange,
                       ),
-                      const SizedBox(width: 4),
-                      const Expanded(
-                        child: Text(
-                          '请先配置 S3 以启用同步功能',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange,
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _showS3ConfigDialog,
+                  ),
+                ),
+
+                if (!isConfigured)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, left: 16),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_rounded,
+                          size: 16,
+                          color: Colors.orange,
+                        ),
+                        const SizedBox(width: 4),
+                        const Expanded(
+                          child: Text(
+                            '请先配置 S3 以启用同步功能',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Task Sync Status Panel with Sync Button in top-right corner
+                TaskSyncStatusPanel(
+                  syncEngine: widget.syncEngine,
+                  onSyncPressed: _syncNow,
+                  isConfigured: isConfigured,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Auto Sync on Startup Switch
+                Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.auto_awesome_rounded),
+                    title: const Text('启动时自动同步'),
+                    subtitle: const Text('打开应用时自动执行一次同步'),
+                    value: _autoSync,
+                    onChanged: isConfigured ? _toggleAutoSync : null,
                   ),
                 ),
-
-              const SizedBox(height: 16),
-
-              // Task Sync Status Panel with Sync Button in top-right corner
-              TaskSyncStatusPanel(
-                syncEngine: widget.syncEngine,
-                onSyncPressed: _syncNow,
-                isConfigured: isConfigured,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Auto Sync on Startup Switch
-              Card(
-                child: SwitchListTile(
-                  secondary: const Icon(Icons.auto_awesome_rounded),
-                  title: const Text('启动时自动同步'),
-                  subtitle: const Text('打开应用时自动执行一次同步'),
-                  value: _autoSync,
-                  onChanged: isConfigured ? _toggleAutoSync : null,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -472,4 +527,3 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
     );
   }
 }
-

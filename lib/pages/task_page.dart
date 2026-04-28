@@ -587,13 +587,12 @@ class _TaskPageState extends State<TaskPage> {
         '${twoDigits(value.hour)}:${twoDigits(value.minute)}';
   }
 
-  void _showComingSoon(String label) {
-    _showSnack('$label 功能即将上线');
-  }
-
   Future<void> _openSettingsPage() async {
     if (!_isWideLayout(context)) {
-      Navigator.of(context).pop();
+      final scaffold = Scaffold.maybeOf(context);
+      if (scaffold?.isDrawerOpen ?? false) {
+        Navigator.of(context).pop();
+      }
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(

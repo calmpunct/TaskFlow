@@ -227,27 +227,35 @@ class _HomeShellState extends State<HomeShell>
           );
         }
 
-        return Scaffold(
-          body: IndexedStack(index: _currentIndex, children: _pages),
-          bottomNavigationBar: _isTaskDrawerOpen
-              ? null
-              : BottomNavigationBar(
-                  type: BottomNavigationBarType.fixed,
-                  currentIndex: _currentIndex,
-                  onTap: (index) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                  },
-                  items: _tabs
-                      .map(
-                        (tab) => BottomNavigationBarItem(
-                          icon: Icon(tab.icon),
-                          label: tab.label,
-                        ),
-                      )
-                      .toList(),
-                ),
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            // Prevent back button from exiting the app on main screen
+            // The back button is disabled on the main screen
+          },
+          child: Scaffold(
+            body: IndexedStack(index: _currentIndex, children: _pages),
+            bottomNavigationBar: _isTaskDrawerOpen
+                ? null
+                : BottomNavigationBar(
+                    type: BottomNavigationBarType.fixed,
+                    currentIndex: _currentIndex,
+                    onTap: (index) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    },
+                    items: _tabs
+                        .map(
+                          (tab) => BottomNavigationBarItem(
+                            icon: Icon(tab.icon),
+                            label: tab.label,
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
         );
       },
     );
