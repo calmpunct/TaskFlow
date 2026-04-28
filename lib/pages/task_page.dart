@@ -227,7 +227,7 @@ class _TaskPageState extends State<TaskPage> {
   }
 
   Future<void> _syncFromExternalTrigger() {
-    return _syncTasks(showSnack: true);
+    return _syncTasks(showSnack: false, rethrowOnError: true);
   }
 
   /// 处理下拉刷新，触发同步
@@ -235,7 +235,10 @@ class _TaskPageState extends State<TaskPage> {
     return _syncTasks(showSnack: true);
   }
 
-  Future<void> _syncTasks({required bool showSnack}) async {
+  Future<void> _syncTasks({
+    required bool showSnack,
+    bool rethrowOnError = false,
+  }) async {
     if (_syncing) {
       return;
     }
@@ -259,6 +262,9 @@ class _TaskPageState extends State<TaskPage> {
       }
       if (showSnack) {
         _showSnack('同步失败: $error');
+      }
+      if (rethrowOnError) {
+        rethrow;
       }
     } finally {
       if (mounted) {

@@ -110,12 +110,23 @@ class _HomeShellState extends State<HomeShell>
     }
   }
 
+  Future<void> _openSettingsPage() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsPage(
+          configManager: widget.configManager,
+          syncEngine: widget.syncEngine,
+        ),
+      ),
+    );
+  }
+
   bool _isLargeScreen(double width) {
     return width >= 900;
   }
 
   Future<void> _triggerTaskSync() async {
-    if (_shellSyncing || _taskSyncAction == null) {
+    if (_shellSyncing) {
       return;
     }
 
@@ -125,7 +136,18 @@ class _HomeShellState extends State<HomeShell>
     _syncRotationController.repeat();
 
     try {
-      await _taskSyncAction!.call();
+      if (_taskSyncAction != null) {
+        await _taskSyncAction!.call();
+      } else {
+        await _syncFromShell();
+      }
+      if (mounted) {
+        _showShellSnack('同步完成');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showShellSnack('同步失败: $error');
+      }
     } finally {
       if (mounted) {
         _syncRotationController.stop();
@@ -136,14 +158,24 @@ class _HomeShellState extends State<HomeShell>
     }
   }
 
-  Future<void> _openSettingsPage() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => SettingsPage(
-          configManager: widget.configManager,
-          syncEngine: widget.syncEngine,
-        ),
-      ),
+  Future<void> _syncFromShell() async {
+    if (widget.syncEngine is NoopSyncEngine) {
+      await widget.syncEngine.syncNow();
+      return;
+    }
+    final config = await widget.configManager.loadConfig();
+    if (!config.enabled) {
+      throw Exception('未启用对象存储同步，请先在设置中开启。');
+    }
+    if (!config.isComplete) {
+      throw Exception('同步配置不完整，请先保存完整的 S3 配置。');
+    }
+    await widget.configManager.syncNow();
+  }
+
+  void _showShellSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -189,16 +221,13 @@ class _HomeShellState extends State<HomeShell>
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
               child: SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed:
-                      (_currentIndex == 0 && _taskSyncAction != null)
-                          ? _triggerTaskSync
-                          : null,
+                child: IconButton.filled(
+                  onPressed: _shellSyncing ? null : _triggerTaskSync,
+                  tooltip: '立刻同步',
                   icon: RotationTransition(
                     turns: _syncRotationController,
                     child: const Icon(Icons.sync_rounded),
                   ),
-                  label: const SizedBox.shrink(),
                 ),
               ),
             ),
