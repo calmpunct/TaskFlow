@@ -55,6 +55,7 @@ flutter test
 <div>
 <img src="screenshot/win-and-pad.png" width="100%"/>
 </div>
+
 ## 许可证（License）
 
 本项目采用 Affero General Public License v3（AGPL-3.0）。选择 AGPL v3 意味着：如果您修改并对外提供基于本项目的网络服务，必须以同等 AGPL v3 许可证开源所做的修改和衍生代码。
