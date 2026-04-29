@@ -1,20 +1,28 @@
 # taskflow
 
-一个任务清单与纪念日软件（本地数据库使用 drift + SQLite）。
+一个轻量的任务清单与纪念日管理应用（本地数据库使用 drift + SQLite），用于管理每日任务、专注模式、日历视图与重要纪念日提醒。
 
-## 当前功能
+## 主要特点
 
 - 底部导航：任务、专注、日历、纪念日
 - 任务侧边栏分类：今天、明天、最近7天、收集箱、已经完成、垃圾桶、已经放弃
-- 任务支持本地记忆（drift + SQLite 持久化）
-- 点击任务进入详情编辑：时间、名字、描述、所在位置
+- 任务支持本地持久化（drift + SQLite）
+- 点击任务进入详情编辑：时间、名称、描述、位置
+- 简洁的 UI 与离线优先的数据层设计，便于私有化部署与本地使用
 
-## 数据层结构
+## 技术栈
 
-- `lib/data/local/app_database.dart`: 数据库入口与初始化
-- `lib/data/local/tables/`: 表定义（`tasks`、`ops`、`devices`、`sync_states` 等）
-- `lib/data/local/daos/`: DAO 层（CRUD、watch、replay）
-- `lib/data/task_repository.dart`: Repository 封装（页面调用入口）
+- Flutter（前端）
+- Dart
+- drift + SQLite（本地持久化）
+- Repository + DAO 层结构
+
+## 数据层结构（概要）
+
+- `lib/data/local/app_database.dart`: 数据库入口与初始化  
+- `lib/data/local/tables/`: 表定义（`tasks`、`ops`、`devices`、`sync_states` 等）  
+- `lib/data/local/daos/`: DAO 层（CRUD、watch、replay）  
+- `lib/data/task_repository.dart`: Repository 封装（页面调用入口）  
 - `lib/data/sync/sync_engine.dart`: 同步引擎接口（当前提供 noop 实现）
 
 ## 代码生成（drift）
@@ -36,16 +44,28 @@ flutter run
 flutter test
 ```
 
-## Getting Started
+## 软件截图
 
-This project is a starting point for a Flutter application.
+<div>
+<img src="screenshot/phone1.png" width="30%"/>
+ <img src="screenshot/phone2.png" width="30%"/>
+ <img src="screenshot/phone3.png" width="30%"/>
 
-A few resources to get you started if this is your first Flutter project:
+</div>
+<div>
+<img src="screenshot/win-and-pad.png" width="100%"/>
+</div>
+## 许可证（License）
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+本项目采用 Affero General Public License v3（AGPL-3.0）。选择 AGPL v3 意味着：如果您修改并对外提供基于本项目的网络服务，必须以同等 AGPL v3 许可证开源所做的修改和衍生代码。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- 许可证文本与详情：https://www.gnu.org/licenses/agpl-3.0.html
+
+```
+Copyright (c) <2026-4> <calmpunct>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+```
